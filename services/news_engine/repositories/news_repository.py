@@ -1,8 +1,61 @@
-import feedparser
-import re
+import feedparser, sys, re
 from typing import List, Dict, Optional
 from bs4 import BeautifulSoup
+from sentence_transformers import SentenceTransformer
+from sklearn.metrics.pairwise import cosine_similarity
+import numpy as np
 
+# ── CONFIG ───────────────────────────────────────────
+MODEL_NAME   = "sentence-transformers/all-mpnet-base-v2"
+SIM_DUP_TH   = 0.83         # duplicate threshold
+SIM_COS_SHORT = 0.30        # min cosine cho keyword ≤ 2 token
+SIM_COS_LONG  = 0.50        # min cosine cho keyword ≥ 3 token
+
+MODEL = SentenceTransformer(MODEL_NAME)
+MODEL.max_seq_length = 256
+
+_EMB_DUP_BUF: List[np.ndarray] = []
+_EMB_KW_BUF: Dict[str, np.ndarray] = {}
+
+# ── UTILS ────────────────────────────────────────────
+def _embed(text: str) -> np.ndarray:
+    return MODEL.encode(text, normalize_embeddings=True)
+
+def _is_duplicate(text: str) -> bool:
+    vec = _embed(text)
+    if _EMB_DUP_BUF and cosine_similarity([vec], _EMB_DUP_BUF).max() >= SIM_DUP_TH:
+        return True
+    _EMB_DUP_BUF.append(vec)
+    return False
+
+def _keyword_relevant(text: str, kws: List[str]) -> bool:
+    if not kws:
+        return True
+    lowered = text.lower()
+    vec = None  # delay encode tới khi cần
+    for kw in kws:
+        kw_norm = kw.lower().strip()
+        tokens = kw_norm.split()
+        # Nếu từ/cụm xuất hiện exact → true luôn
+        if kw_norm in lowered:
+            return True
+        # chưa trong câu → so cosine
+        if kw not in _EMB_KW_BUF:
+            _EMB_KW_BUF[kw] = _embed(kw)
+        if vec is None:
+            vec = _embed(text)
+        sim = cosine_similarity([vec], [_EMB_KW_BUF[kw]])[0, 0]
+        # log để bạn quan sát
+        print(f"[RELEVANT CHECK] '{kw}' vs sentence  →  {sim:.3f}")
+        thresh = SIM_COS_SHORT if len(tokens) <= 2 else SIM_COS_LONG
+        if sim >= thresh:
+            return True
+    return False
+
+def _clean_html(html: str) -> str:
+    return BeautifulSoup(html, "html.parser").get_text(" ", strip=True)
+
+# ── MAIN CLASS ───────────────────────────────────────
 class NewsRepository:
     RSS_FEEDS = {
         "reuters":      "http://localhost:1200/reuters/world",
@@ -10,69 +63,40 @@ class NewsRepository:
         "ap_news":      "http://localhost:1200/apnews/topics/world-news",
     }
 
-    # ---------- PUBLIC -------------------------------------------------------
     def fetch_all(
         self,
         max_per_source: int = 15,
         keywords: Optional[List[str]] = None,
     ) -> List[Dict]:
-        """
-        Lấy tin từ 3 nguồn, bỏ trùng *toàn cục* và lọc theo từ-khóa (nếu có).
-        Trả về list[dict] với các field: title, summary, link, source
-        """
-        seen: set[str] = set()        # chứa hash của bài đã thêm
         articles: List[Dict] = []
 
         for source, url in self.RSS_FEEDS.items():
             try:
                 feed = feedparser.parse(url)
-                fetched = 0
-
+                taken = 0
                 for entry in feed.entries:
-                    if fetched >= max_per_source:
+                    if taken >= max_per_source:
                         break
 
-                    # 1) Chuẩn hóa (title + link) để sinh "dấu vân tay"
-                    title = entry.title.strip()
-                    link  = entry.link.split("?")[0]  # bỏ query-string dư
-                    fingerprint = self._fingerprint(title, link)
+                    title   = entry.title.strip()
+                    summary = _clean_html(entry.get("summary", ""))
+                    link    = entry.link.split("?")[0]
+                    text    = f"{title} {summary}"
 
-                    # 2) Bỏ bài trùng (đã gặp ở nguồn khác)
-                    if fingerprint in seen:
+                    # 1) keyword filter
+                    if not _keyword_relevant(text, keywords or []):
+                        continue
+                    # 2) duplicate filter
+                    if _is_duplicate(text):
+                        print(f"[DUP] {source:12} | {title}")
                         continue
 
-                    summary = self._clean(entry.get("summary", ""))
-
-                    # 3) Lọc theo từ-khóa nếu có
-                    if keywords and not self._has_keyword(title, summary, keywords):
-                        continue
-
-                    # 4) Lưu
                     articles.append(
                         {"title": title, "summary": summary, "link": link, "source": source}
                     )
-                    fetched += 1
-                    seen.add(fingerprint)
+                    taken += 1
 
-            except Exception as exc:
-                print(f"[{source}] error: {exc}")
+            except Exception as e:
+                print(f"[{source}] ERROR: {e}", file=sys.stderr)
 
         return articles
-
-    # ---------- PRIVATE ------------------------------------------------------
-    @staticmethod
-    def _clean(html: str) -> str:
-        return BeautifulSoup(html, "html.parser").get_text(" ", strip=True)
-
-    @staticmethod
-    def _fingerprint(title: str, link: str) -> str:
-        """Ghép & hạ thấp, bỏ ký tự không chữ – chống trùng tương đối."""
-        def slugify(text: str) -> str:
-            return re.sub(r"[^a-z0-9]+", "", text.lower())
-
-        return f"{slugify(title)}-{slugify(link)}"
-
-    @staticmethod
-    def _has_keyword(title: str, summary: str, kws: List[str]) -> bool:
-        target = f"{title} {summary}".lower()
-        return any(kw.lower() in target for kw in kws)

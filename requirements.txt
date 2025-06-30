@@ -11,3 +11,4 @@ pandas
 pytest
 python-dotenv
 beautifulsoup4 
+sentence-transformers scikit-learn
