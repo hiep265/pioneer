@@ -1,0 +1,47 @@
+# docker-compose.yml
+version: "3.9"
+
+services:
+  rsshub:
+    image: diygod/rsshub:latest
+    container_name: rsshub
+    restart: always
+    ports:
+      - "1200:1200"
+    environment:
+      NODE_ENV: production       # bật cache và gzip
+      CACHE_TYPE: redis
+      REDIS_URL: redis://redis:6379/
+      # ———— nếu cần vượt tường lửa / 403 ————
+      # PROXY_PROTOCOL: http
+      # PROXY_HOST: 1.2.3.4
+      # PROXY_PORT: 7890
+      # ————       Puppeteer headless (lọc JS nặng) ————
+      PUPPETEER_WS_ENDPOINT: ws://browserless:3000
+    depends_on:
+      - redis
+      - browserless
+
+  redis:
+    image: redis:alpine
+    restart: always
+    volumes:
+      - redis-data:/data
+
+  browserless:            # Chrome headless – chỉ bật khi thật sự cần
+    image: browserless/chrome
+    restart: always
+    ulimits:
+      core:
+        soft: 0
+        hard: 0
+
+  watchtower:
+    image: containrrr/watchtower
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --cleanup --schedule "0 4 * * *"
+
+volumes:
+  redis-data:

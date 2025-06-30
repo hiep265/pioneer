@@ -36,3 +36,4 @@ def health_check():
 
 # Để chạy ứng dụng này cục bộ, sử dụng lệnh sau trong terminal (sau khi kích hoạt môi trường ảo):
 # uvicorn services.news_engine.main:app --reload --port 8001
+# uvicorn services.news_engine.main:app --reload --port 8001

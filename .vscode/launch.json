@@ -12,7 +12,9 @@
             "module": "uvicorn",
             "args": [
                 "services.news_engine.main:app",
-                "--reload"
+                "--reload",
+                "--port",
+                "8001"
             ],
             "jinja": true
         }

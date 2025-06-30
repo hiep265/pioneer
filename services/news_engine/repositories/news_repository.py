@@ -4,8 +4,9 @@ from bs4 import BeautifulSoup
 
 class NewsRepository:
     RSS_FEEDS = {
-        "reuters": "http://feeds.reuters.com/reuters/worldNews",
+        "reuters": "http://localhost:1200/reuters/world",
         "the_guardian": "https://www.theguardian.com/world/rss",
+        "ap_news": "http://localhost:1200/apnews/topics/world-news",
     }
 
     def fetch_all(self, max_per_source: int = 15, keywords: Optional[List[str]] = None) -> List[Dict]:
