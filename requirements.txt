@@ -1,0 +1,12 @@
+fastapi
+uvicorn
+python-telegram-bot
+feedparser
+openai
+facebook-business
+fuzzywuzzy
+pillow
+gspread
+pandas
+pytest
+python-dotenv

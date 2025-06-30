@@ -1,0 +1,260 @@
+[
+  {
+    "id": 0,
+    "title": "Setup Development Environment",
+    "status": "pending",
+    "description": "Khởi tạo mono-repo với virtual environment và cấu hình cơ bản.",
+    "details": "1. **Git repository**: Tạo `.gitignore`, `LICENSE`, commit đầu tiên.\n2. **Python virtual env**: `python -m venv venv`, activate, `pip install -r requirements.txt`.\n3. **Requirements.txt**: `fastapi`, `uvicorn`, `python-telegram-bot`, `feedparser`, `openai`, `facebook-business-sdk`, `fuzzywuzzy`, `pillow`, `gspread`, `pandas`, `pytest`, `python-dotenv`.\n4. **Environment config**: Tạo `.env.example` với TELEGRAM_BOT_TOKEN, OPENAI_API_KEY, FB_PAGE_ACCESS_TOKEN, GOOGLE_SERVICE_JSON.\n5. **Basic README**: Hướng dẫn setup environment, install dependencies.",
+    "priority": "high",
+    "testStrategy": "Chạy `python -m pytest --version` và `python -c 'import fastapi'` thành công.",
+    "dependencies": [],
+    "timeline": "Day 1 Morning (2-3 hours)",
+    "affected_files": [".gitignore", "requirements.txt", ".env.example", "README.md"],
+    "subtasks": [
+      {
+        "id": "0.1",
+        "title": "Git setup & project structure",
+        "description": "Tạo repo, folder structure: /services, /n8n, /tests",
+        "timeline": "45 mins"
+      },
+      {
+        "id": "0.2", 
+        "title": "Python environment",
+        "description": "Virtual env + requirements.txt + .env config",
+        "timeline": "90 mins"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "title": "NewsEngine MVP",
+    "status": "pending", 
+    "description": "Core API `/news/top3` lấy RSS + GPT ranking, chạy standalone.",
+    "details": "1. **RSS Fetcher**: `services/news_engine/rss_fetcher.py` - lấy 15 bài/source từ Guardian, Reuters.\n2. **Simple Deduplication**: So sánh title similarity > 80% thì loại bỏ.\n3. **GPT Scorer**: OpenAI API prompt ngắn gọn, trả về relevance score 0-1.\n4. **FastAPI app**: `services/news_engine/main.py` với endpoint `/news/top3`, CORS enabled.\n5. **Local run**: `uvicorn main:app --reload --port 8001`",
+    "priority": "high",
+    "testStrategy": "GET localhost:8001/news/top3 trả về 3 articles có title, summary, score.",
+    "dependencies": [0],
+    "timeline": "Day 1 Afternoon (4-5 hours)",
+    "affected_files": ["services/news_engine/main.py", "services/news_engine/rss_fetcher.py", "services/news_engine/gpt_scorer.py"],
+    "subtasks": [
+      {
+        "id": "1.1",
+        "title": "RSS fetching logic", 
+        "description": "feedparser + basic parsing",
+        "timeline": "90 mins"
+      },
+      {
+        "id": "1.2",
+        "title": "GPT integration",
+        "description": "OpenAI client + simple scoring prompt",
+        "timeline": "90 mins"  
+      },
+      {
+        "id": "1.3",
+        "title": "FastAPI endpoints",
+        "description": "/news/top3 + /health endpoint",
+        "timeline": "60 mins"
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "title": "Telegram Bot + n8n Basic Flow",
+    "status": "pending",
+    "description": "Telegram bot /start → gọi NewsEngine → hiển thị 3 bài với inline buttons.",
+    "details": "1. **Telegram Bot Setup**: python-telegram-bot, webhook hoặc polling.\n2. **n8n Installation**: Local install qua npm hoặc binary.\n3. **Basic Workflow**: Telegram Trigger → HTTP Request (NewsEngine) → Format message → Send với InlineKeyboard.\n4. **Callback handling**: Capture button press, lưu choice vào workflow data.\n5. **Test flow**: /start → nhận 3 bài → chọn 1 bài → confirm message.",
+    "priority": "high", 
+    "testStrategy": "Telegram /start → 3 articles với buttons → chọn article 2 → nhận confirmation.",
+    "dependencies": [1],
+    "timeline": "Day 2 Morning (4 hours)",
+    "affected_files": ["n8n/workflows/news_selection.json", "services/telegram_bot/bot.py"],
+    "subtasks": [
+      {
+        "id": "2.1",
+        "title": "n8n setup",
+        "description": "Install n8n locally, basic configuration",
+        "timeline": "60 mins"
+      },
+      {
+        "id": "2.2", 
+        "title": "Telegram integration",
+        "description": "Bot setup + webhook/polling config",
+        "timeline": "90 mins"
+      },
+      {
+        "id": "2.3",
+        "title": "News selection workflow",
+        "description": "n8n workflow: trigger → API call → format → send",
+        "timeline": "90 mins"
+      }
+    ]
+  },
+  {
+    "id": 3,
+    "title": "CaptionAI Service",
+    "status": "pending",
+    "description": "Standalone FastAPI service sinh caption tiếng Việt từ article data.",
+    "details": "1. **Prompt Engineering**: Template prompt với article title, summary, focus topics.\n2. **OpenAI Integration**: GPT-4o với system prompt định hình tone 'expert, critical, engaging'.\n3. **Post-processing**: Validate length 250-400 words, tiếng Việt có dấu.\n4. **FastAPI endpoint**: POST `/caption` nhận {article, optional_context} → {caption, word_count}.\n5. **Local run**: Port 8002, CORS enabled.",
+    "priority": "high",
+    "testStrategy": "POST mock article → caption 250-400 từ tiếng Việt, tone phù hợp.",
+    "dependencies": [0],
+    "timeline": "Day 2 Afternoon (3-4 hours)", 
+    "affected_files": ["services/caption_ai/main.py", "services/caption_ai/prompts.py", "services/caption_ai/openai_client.py"],
+    "subtasks": [
+      {
+        "id": "3.1",
+        "title": "Prompt templates",
+        "description": "Vietnamese caption prompts, tone guidelines",
+        "timeline": "90 mins"
+      },
+      {
+        "id": "3.2",
+        "title": "OpenAI client wrapper", 
+        "description": "API calls + error handling + retry logic",
+        "timeline": "90 mins"
+      },
+      {
+        "id": "3.3",
+        "title": "FastAPI service",
+        "description": "/caption endpoint + validation",
+        "timeline": "60 mins"
+      }
+    ]
+  },
+  {
+    "id": 4,
+    "title": "Caption Approval Workflow",
+    "status": "pending",
+    "description": "n8n workflow: selected article → generate caption → approval loop với edit option.",
+    "details": "1. **Extend n8n workflow**: Sau khi chọn article → HTTP call CaptionAI.\n2. **Draft presentation**: Format caption trong Telegram message với Approve/Edit buttons.\n3. **Edit loop**: Nếu Edit → capture user feedback → regenerate với feedback.\n4. **Max 2 retries**: Sau 2 lần edit → force approve hoặc cancel.\n5. **Data flow**: Pass approved caption to next step.",
+    "priority": "high",
+    "testStrategy": "Edit 1 lần → new caption; Approve → next workflow step.",
+    "dependencies": [2, 3],
+    "timeline": "Day 2 Evening (2-3 hours)",
+    "affected_files": ["n8n/workflows/news_selection.json"],
+    "subtasks": [
+      {
+        "id": "4.1",
+        "title": "Caption generation node",
+        "description": "HTTP request to CaptionAI service",
+        "timeline": "45 mins"
+      },
+      {
+        "id": "4.2",
+        "title": "Approval interface",
+        "description": "Telegram buttons + callback handling",
+        "timeline": "90 mins"
+      }
+    ]
+  },
+  {
+    "id": 5,
+    "title": "Facebook Publisher Service",  
+    "status": "pending",
+    "description": "FastAPI service đăng text post lên Facebook Page (tạm bỏ image).",
+    "details": "1. **Facebook SDK**: facebook-business-sdk, Graph API v18+.\n2. **Simple text post**: POST `/{page_id}/feed` với message only.\n3. **Error handling**: Token validation, permission check, rate limiting.\n4. **Response format**: {post_id, post_url, status}.\n5. **FastAPI endpoint**: POST `/publish` nhận {page_id, message}.",
+    "priority": "high",
+    "testStrategy": "POST với test message → Facebook page có post mới, trả về post_id.",
+    "dependencies": [0],
+    "timeline": "Day 3 Morning (3 hours)",
+    "affected_files": ["services/fb_publisher/main.py", "services/fb_publisher/fb_client.py"],
+    "subtasks": [
+      {
+        "id": "5.1", 
+        "title": "Facebook SDK setup",
+        "description": "API client + authentication",
+        "timeline": "90 mins"
+      },
+      {
+        "id": "5.2",
+        "title": "Publishing logic",
+        "description": "Text post + error handling",
+        "timeline": "90 mins"
+      }
+    ]
+  },
+  {
+    "id": 6,
+    "title": "End-to-End Publishing Workflow",
+    "status": "pending", 
+    "description": "Complete n8n workflow: news selection → caption → publish to Facebook → log results.",
+    "details": "1. **Extend workflow**: Thêm HTTP node gọi Facebook Publisher.\n2. **Final confirmation**: Show preview trước khi publish.\n3. **Publish step**: POST to FbPublisher với approved caption.\n4. **Simple logging**: Log kết quả vào local file hoặc console.\n5. **Success message**: Gửi Telegram confirmation với FB post link.",
+    "priority": "high",
+    "testStrategy": "Complete flow /start → chọn bài → approve caption → publish thành công → nhận link FB.",
+    "dependencies": [4, 5],
+    "timeline": "Day 3 Afternoon (4 hours)",
+    "affected_files": ["n8n/workflows/news_selection.json", "logs/activity.log"],
+    "subtasks": [
+      {
+        "id": "6.1",
+        "title": "Publishing integration",
+        "description": "Connect approval flow to FB publisher",
+        "timeline": "90 mins"
+      },
+      {
+        "id": "6.2",
+        "title": "Logging system", 
+        "description": "Simple file-based logging",
+        "timeline": "60 mins"
+      },
+      {
+        "id": "6.3",
+        "title": "End-to-end testing",
+        "description": "Full workflow validation",
+        "timeline": "90 mins"
+      }
+    ]
+  },
+  {
+    "id": 7,
+    "title": "Basic Testing & Documentation",
+    "status": "pending",
+    "description": "Unit tests cho core functions, integration test cho full workflow, update README.",
+    "details": "1. **Unit tests**: Test RSS fetcher, GPT scorer, caption generator (với mock).\n2. **Integration test**: Full workflow test với mock Facebook API.\n3. **Documentation**: Update README với setup instructions, API endpoints.\n4. **Environment setup guide**: Detailed .env configuration.\n5. **Demo preparation**: Sample run với screenshots.",
+    "priority": "medium",
+    "testStrategy": "pytest pass toàn bộ, README guide cho phép setup từ đầu trong 15 phút.",
+    "dependencies": [6],
+    "timeline": "Day 4 Morning (3 hours)",
+    "affected_files": ["tests/", "README.md", "docs/SETUP.md"],
+    "subtasks": [
+      {
+        "id": "7.1",
+        "title": "Core unit tests",
+        "description": "Test individual service functions",
+        "timeline": "90 mins"
+      },
+      {
+        "id": "7.2",
+        "title": "Documentation update",
+        "description": "README + setup guide",
+        "timeline": "90 mins"
+      }
+    ]
+  },
+  {
+    "id": 8,
+    "title": "Demo Preparation & Deliverables",
+    "status": "pending",
+    "description": "Chuẩn bị demo, export n8n workflow, tạo sample data, video demo.",
+    "details": "1. **n8n workflow export**: JSON file có thể import.\n2. **Sample run log**: CSV/JSON với các bước đã thực hiện.\n3. **Demo script**: Step-by-step demo flow.\n4. **Video recording**: Screen recording full workflow 3-5 phút.\n5. **Final README**: Complete setup + run instructions.",
+    "priority": "medium", 
+    "testStrategy": "Người khác có thể follow README để setup và chạy demo thành công.",
+    "dependencies": [7],
+    "timeline": "Day 4 Afternoon (2-3 hours)",
+    "affected_files": ["n8n/workflows/", "demo/", "README.md"],
+    "subtasks": [
+      {
+        "id": "8.1",
+        "title": "Export & package",
+        "description": "n8n workflow export + sample data",
+        "timeline": "60 mins"
+      },
+      {
+        "id": "8.2",
+        "title": "Demo recording",
+        "description": "Screen recording + demo script",
+        "timeline": "90 mins"
+      }
+    ]
+  }
+]
