@@ -10,3 +10,4 @@ gspread
 pandas
 pytest
 python-dotenv
+beautifulsoup4 

@@ -2,7 +2,7 @@
   {
     "id": 0,
     "title": "Setup Development Environment",
-    "status": "pending",
+    "status": "completed",
     "description": "Khởi tạo mono-repo với virtual environment và cấu hình cơ bản.",
     "details": "1. **Git repository**: Tạo `.gitignore`, `LICENSE`, commit đầu tiên.\n2. **Python virtual env**: `python -m venv venv`, activate, `pip install -r requirements.txt`.\n3. **Requirements.txt**: `fastapi`, `uvicorn`, `python-telegram-bot`, `feedparser`, `openai`, `facebook-business-sdk`, `fuzzywuzzy`, `pillow`, `gspread`, `pandas`, `pytest`, `python-dotenv`.\n4. **Environment config**: Tạo `.env.example` với TELEGRAM_BOT_TOKEN, OPENAI_API_KEY, FB_PAGE_ACCESS_TOKEN, GOOGLE_SERVICE_JSON.\n5. **Basic README**: Hướng dẫn setup environment, install dependencies.",
     "priority": "high",
@@ -28,14 +28,20 @@
   {
     "id": 1,
     "title": "NewsEngine MVP",
-    "status": "pending", 
+    "status": "completed", 
     "description": "Core API `/news/top3` lấy RSS + GPT ranking, chạy standalone.",
     "details": "1. **RSS Fetcher**: `services/news_engine/rss_fetcher.py` - lấy 15 bài/source từ Guardian, Reuters.\n2. **Simple Deduplication**: So sánh title similarity > 80% thì loại bỏ.\n3. **GPT Scorer**: OpenAI API prompt ngắn gọn, trả về relevance score 0-1.\n4. **FastAPI app**: `services/news_engine/main.py` với endpoint `/news/top3`, CORS enabled.\n5. **Local run**: `uvicorn main:app --reload --port 8001`",
     "priority": "high",
     "testStrategy": "GET localhost:8001/news/top3 trả về 3 articles có title, summary, score.",
     "dependencies": [0],
     "timeline": "Day 1 Afternoon (4-5 hours)",
-    "affected_files": ["services/news_engine/main.py", "services/news_engine/rss_fetcher.py", "services/news_engine/gpt_scorer.py"],
+    "affected_files": [
+      "services/news_engine/main.py",
+      "services/news_engine/controllers/news_controller.py",
+      "services/news_engine/services/news_service.py",
+      "services/news_engine/repositories/news_repository.py",
+      "services/news_engine/repositories/scoring_repository.py"
+    ],
     "subtasks": [
       {
         "id": "1.1",
@@ -67,7 +73,7 @@
     "testStrategy": "Telegram /start → 3 articles với buttons → chọn article 2 → nhận confirmation.",
     "dependencies": [1],
     "timeline": "Day 2 Morning (4 hours)",
-    "affected_files": ["n8n/workflows/news_selection.json", "services/telegram_bot/bot.py"],
+    "affected_files": [],
     "subtasks": [
       {
         "id": "2.1",
@@ -99,7 +105,7 @@
     "testStrategy": "POST mock article → caption 250-400 từ tiếng Việt, tone phù hợp.",
     "dependencies": [0],
     "timeline": "Day 2 Afternoon (3-4 hours)", 
-    "affected_files": ["services/caption_ai/main.py", "services/caption_ai/prompts.py", "services/caption_ai/openai_client.py"],
+    "affected_files": [],
     "subtasks": [
       {
         "id": "3.1",
@@ -131,7 +137,7 @@
     "testStrategy": "Edit 1 lần → new caption; Approve → next workflow step.",
     "dependencies": [2, 3],
     "timeline": "Day 2 Evening (2-3 hours)",
-    "affected_files": ["n8n/workflows/news_selection.json"],
+    "affected_files": [],
     "subtasks": [
       {
         "id": "4.1",
@@ -157,7 +163,7 @@
     "testStrategy": "POST với test message → Facebook page có post mới, trả về post_id.",
     "dependencies": [0],
     "timeline": "Day 3 Morning (3 hours)",
-    "affected_files": ["services/fb_publisher/main.py", "services/fb_publisher/fb_client.py"],
+    "affected_files": [],
     "subtasks": [
       {
         "id": "5.1", 
@@ -183,7 +189,7 @@
     "testStrategy": "Complete flow /start → chọn bài → approve caption → publish thành công → nhận link FB.",
     "dependencies": [4, 5],
     "timeline": "Day 3 Afternoon (4 hours)",
-    "affected_files": ["n8n/workflows/news_selection.json", "logs/activity.log"],
+    "affected_files": [],
     "subtasks": [
       {
         "id": "6.1",
