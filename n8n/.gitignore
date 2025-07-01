@@ -1,0 +1,35 @@
+# Tệp môi trường
+.env
+
+# Thư mục dữ liệu n8n
+.n8n/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Thư mục phụ thuộc
+node_modules/
+
+# Tệp tạm thời
+.DS_Store
+Thumbs.db
+*.tmp
+*.bak
+*.swp
+
+# Tệp khóa và chứng chỉ
+*.pem
+*.key
+*.cert
+
+# Tệp sao lưu
+*.tar.gz
+*.zip
+*.rar
+
+# Thư mục Docker
+.docker/

@@ -13,6 +13,9 @@ python-dotenv
 beautifulsoup4
 sentence-transformers
 scikit-learn
-facebook-scraper
-selenium==4.21.0
 pyppeteer
+lxml
+apify
+transformers
+torch
+AITeamVN-Vietnamese-Embedding

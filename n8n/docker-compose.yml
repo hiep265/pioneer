@@ -1,0 +1,52 @@
+version: '3'
+
+services:
+  n8n:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: always
+    ports:
+      - "5678:5678"
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - API_URL=http://api:8001
+      - N8N_PROTOCOL=http
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_EDITOR_BASE_URL=http://localhost:5678
+      - WEBHOOK_URL=${WEBHOOK_URL}
+      - GENERIC_TIMEZONE=Asia/Ho_Chi_Minh
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      - api
+
+  api:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      - PORT=8001
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - APIFY_API_TOKEN=${APIFY_API_TOKEN}
+    volumes:
+      - ../app:/app
+
+  # Tùy chọn: Ngrok để tạo URL công khai cho webhook
+  # Bỏ comment phần này nếu bạn muốn sử dụng Ngrok
+  # ngrok:
+  #   image: wernight/ngrok
+  #   ports:
+  #     - "4040:4040"
+  #   environment:
+  #     - NGROK_AUTH=${NGROK_AUTH}
+  #     - NGROK_PORT=n8n:5678
+  #   depends_on:
+  #     - n8n
+
+volumes:
+  n8n_data:
+    driver: local

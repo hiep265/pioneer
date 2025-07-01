@@ -1,4 +1,4 @@
-import os, json, logging, random, re, argparse, sys, asyncio
+import os, json, logging, random, re, argparse, sys, asyncio, hashlib
 from datetime import datetime, timedelta
 from typing import List, Dict
 
@@ -24,7 +24,7 @@ class FacebookCrawler:
         "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1"
     )
 
-    # ---------- Khởi tạo --------------------------------------------------
+    # ------------ khởi tạo ------------------------------------------------
     @classmethod
     async def create(cls, *, desktop: bool = False):
         self = cls()
@@ -34,7 +34,6 @@ class FacebookCrawler:
         if not self.page_id:
             raise ValueError("⚠  FB_PAGE_ID phải khai báo trong .env")
 
-        # ---- cookie path
         txt_path = "cookies/www.facebook.com_cookies.txt"
         json_path = "cookies/fb_cookie.json"
         self.cookie_path = (
@@ -58,6 +57,7 @@ class FacebookCrawler:
                 "--start-maximized",
             ],
             "ignoreHTTPSErrors": True,
+            # 👉 chỉnh đường Chrome phù hợp máy bạn
             "executablePath": r"C:\Program Files\Google\Chrome\Application\chrome.exe",
         }
 
@@ -65,7 +65,6 @@ class FacebookCrawler:
         self.browser: Browser = await launch(**launch_options)
         self.page: Page = (await self.browser.pages())[0]
 
-        # UA & viewport
         if self.desktop:
             await self.page.setUserAgent(
                 self.MOBILE_UA.replace(
@@ -85,17 +84,16 @@ class FacebookCrawler:
         if self.browser:
             await self.browser.close()
 
-    # ---------- Hàm tiện ích ---------------------------------------------
+    # ------------ utils ---------------------------------------------------
     async def _expand_see_more(self):
-        """Nhấn mọi nút 'Xem thêm' / 'See more' hiện trong viewport."""
+        """Bấm tất cả nút/nhãn 'Xem thêm' hiện trong viewport."""
         js = """
         () => {
-            Array.from(document.querySelectorAll('div[role=button], span[role=button], a[role=button]'))
-              .filter(el => {
-                 const t = (el.innerText||'').trim();
-                 return t === 'Xem thêm' || t === 'See more';
-              })
-              .forEach(el => el.click());
+          const btns = Array.from(document.querySelectorAll('span, a, div'));
+          btns.filter(el => {
+             const t = (el.innerText || '').trim();
+             return t === 'Xem thêm' || t === 'See more';
+          }).forEach(el => el.click());
         }
         """
         try:
@@ -104,96 +102,153 @@ class FacebookCrawler:
         except Exception as e:
             log.debug(f"Không click được See more: {e}")
 
-    # ---------- Phần scrape chính ----------------------------------------
-    async def fetch_posts(self, days: int = 10, limit: int = 50) -> List[Dict]:
-        log.info("Scraping %s (≤%s ngày, max %s bài)", self.page_id, days, limit)
-        since = datetime.now() - timedelta(days=days)
+    # ------------ crawl ---------------------------------------------------
+    async def fetch_posts(
+    self,
+    days: int = 10,
+    limit: int = 10,
+    max_scroll: int = 120,      # du di nếu feed dài
+    idle_retry: int = 4         # số vòng cuộn “trơ” liên tiếp thì dừng
+) -> List[Dict]:
+        log.info("Scraping %s (≤%s ngày, cần %s bài)", self.page_id, days, limit)
+
         base = "www.facebook.com" if self.desktop else "m.facebook.com"
-        url = f"https://{base}/{self.page_id}"
-        await self.page.goto(url, {"waitUntil": "networkidle2"})
+        await self.page.goto(f"https://{base}/{self.page_id}", {"waitUntil": "networkidle2"})
+        await asyncio.sleep(300)
 
-        # chờ 1 bài viết đầu
-        try:
-            await self.page.waitForSelector(
-                "div[data-mcomponent='MContainer'][data-type='container'].m.bg-s2",
-                {"timeout": 15000},
-            )
-        except Exception:
-            log.warning("⏲  Hết giờ chờ bài viết – slug sai hoặc cookie hết hạn")
+        posts, seen_ids = [], set()
+        scrolls, idle_cnt = 0, 0
+        last_height, last_art_cnt = 0, 0
 
-        posts: List[Dict] = []
-        last_height, same_cnt = 0, 0
-        while len(posts) < limit and same_cnt < 4:
-            # mở caption dài
+        while scrolls < max_scroll and len(posts) < limit:
+            # 1️⃣ mở caption dài trong viewport
             await self._expand_see_more()
 
-            # lấy HTML
-            html_content = await self.page.content()
-            soup = BeautifulSoup(html_content, "lxml")
-            articles = self._get_articles(soup)
-            log.info("💬 Đang xét %d bài (đã thu %d)", len(articles), len(posts))
+            # 2️⃣ lấy danh sách article
+            html  = await self.page.content()
+            soup  = BeautifulSoup(html, "lxml")
+            arts  = self._get_articles(soup)
+            log.info("💬 Xét %d article (đã có %d hợp lệ)", len(arts), len(posts))
 
-            for art in articles:
+            added = 0
+            for art in arts:
+                if len(posts) >= limit:
+                    break
                 post = self._parse_article(art)
                 if not post:
                     continue
-                if datetime.fromisoformat(post["time"]) < since:
-                    same_cnt = 4
+                pid = str(post["post_id"]).strip()
+                if pid in seen_ids or post["text"].strip().lower() == "ho quoc tuan":
+                    continue
+                posts.append(post)
+                seen_ids.add(pid)
+                added += 1
+
+            # 3️⃣ kiểm tra có tiến triển?
+            curr_height   = await self.page.evaluate("document.body.scrollHeight")
+            curr_art_cnt  = len(arts)
+            progressed    = (added > 0) or (curr_height > last_height) or (curr_art_cnt > last_art_cnt)
+
+            if progressed:
+                idle_cnt = 0
+            else:
+                idle_cnt += 1
+                if idle_cnt >= idle_retry:
+                    log.info("😕 Cuộn %s lần liền không nạp bài mới – dừng.", idle_retry)
                     break
-                if post["post_id"] not in {p["post_id"] for p in posts}:
-                    posts.append(post)
-                    if len(posts) >= limit:
-                        break
 
-            # cuộn
-            await self.page.evaluate("window.scrollBy(0, 1200)")
-            await asyncio.sleep(random.uniform(1.2, 1.8))
-            new_height = await self.page.evaluate("document.body.scrollHeight")
-            same_cnt = same_cnt + 1 if new_height == last_height else 0
-            last_height = new_height
+            last_height, last_art_cnt = curr_height, curr_art_cnt
 
-        log.info("✅ Hoàn thành – lấy %d bài", len(posts))
+            # 4️⃣ cuộn sát đáy để FB auto-load
+            await self.page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+            await asyncio.sleep(random.uniform(1.2, 2.0))
+            scrolls += 1
+
+        log.info("✅ Thu được %d/%d bài hợp lệ sau %d lần cuộn", len(posts), limit, scrolls)
         return posts[:limit]
 
-    # ---------- Helper parse ---------------------------------------------
-    def _get_articles(self, soup: BeautifulSoup):
-        anchors = soup.select('a[href*="/posts/"], a[href*="story_fbid="]')
-        articles = []
-        for a in anchors:
-            art = a.find_parent("div")
-            while art and len(art.find_all("a")) < 3:  # loại bỏ comment hoặc gợi ý
-                art = art.find_parent("div")
-            if art and art not in articles:
-                articles.append(art)
-        return articles
+    # ------------ helpers -------------------------------------------------
+    def _get_articles(self, soup: BeautifulSoup) -> List[BeautifulSoup]:
+        # chỉ các container feed có data-tracking-duration-id
+        arts = soup.select(
+            "div.m.bg-s2[data-mcomponent='MContainer'][data-type='container'][data-tracking-duration-id]"
+        )
+
+        good = []
+        for art in arts:
+            cap_tag = art.select_one("div.native-text.rslh")
+            has_caption = bool(cap_tag)
+            has_media = art.select_one("img[data-type='image'], video") is not None
+
+            # bỏ nếu không có caption & media
+            if not (has_caption or has_media):
+                continue
+
+            # caption ngắn hoặc chứa từ khoá giao diện => bỏ
+            if has_caption:
+                txt = cap_tag.get_text(strip=True)
+                bad_kw = ("người theo dõi", "Bài viết", "Giới thiệu", "Chi tiết")
+                if len(txt) <= 10 or any(k.lower() in txt.lower() for k in bad_kw):
+                    continue
+
+            good.append(art)
+
+        return good
+
+
+    def _fallback_post_id(self, art, caption: str) -> str:
+        """Nếu không tìm thấy id qua link → lấy `data-image-id` → hash caption."""
+        img_tag = art.select_one("img[data-image-id]")
+        if img_tag and img_tag.get("data-image-id"):
+            return img_tag["data-image-id"]
+        # hash caption (ổn định cho cùng caption)
+        return hashlib.md5(caption.encode("utf-8")).hexdigest()
 
     def _parse_article(self, art) -> Dict | None:
-        link_tag = art.select_one('a[href*="/posts/"], a[href*="story_fbid="]')
-        if not link_tag:
+        # 1. caption
+        cap_tag = art.select_one("div.native-text.rslh")
+        caption = cap_tag.get_text(" ", strip=True) if cap_tag else ""
+
+        # 2. ảnh
+        img_tags = art.select("img[data-type='image']")
+        imgs = [img["src"] for img in img_tags if "https://" in img.get("src", "")]
+
+        # 3. nếu không có nội dung gì thì bỏ qua
+        if not caption and not imgs:
             return None
-        href = link_tag.get("href")
-        full_url = href if href.startswith("http") else f"https://m.facebook.com{href}"
-        m = re.search(r"story_fbid=(\d+)|/posts/(\d+)|pfbid0[a-zA-Z0-9]+", full_url)
-        post_id = m.group(1) or m.group(2) or m.group(0) if m else None
+
+        # 4. lọc block vớ vẩn (header/avatar)
+        bad_kw = ("người theo dõi", "Bài viết", "Giới thiệu", "Chi tiết")
+        if any(k.lower() in caption.lower() for k in bad_kw):
+            return None
+
+        # 5. lấy post_id
+        post_id = None
+        for tag in img_tags:
+            pid = tag.get("data-image-id")
+            if pid:
+                post_id = pid
+                break
         if not post_id:
+            post_id = self._fallback_post_id(art, caption)
+
+        if caption.strip().lower() == "ho quoc tuan":
             return None
 
-        cap_tag = art.select_one("div[dir='auto'], span[dir='auto']")
-        caption = cap_tag.get_text("\n", strip=True) if cap_tag else ""
-
-        imgs = [img["src"] for img in art.select("img") if "https://" in img.get("src", "")]
+        # 6. comment (tuỳ chọn)
         cmt_tags = art.select("div[dir='auto'][data-visualcompletion='ignore-dynamic']")[:2]
         comments = [c.get_text(" ", strip=True) for c in cmt_tags]
 
         return {
             "post_id": post_id,
             "text": caption,
-            "url": full_url,
+            "url": None,
             "images": imgs,
             "comments": comments,
         }
 
-    # ---------- Cookie ----------------------------------------------------
+
+    # ------------ cookies -------------------------------------------------
     async def _inject_cookies(self):
         cookies_to_set = []
         if self.cookie_path.endswith(".json"):
@@ -213,22 +268,21 @@ class FacebookCrawler:
                 )
         else:
             with open(self.cookie_path, encoding="utf-8") as fp:
-                txt = fp.readlines()
-            for line in txt:
-                if not line.startswith(".facebook.com"):
-                    continue
-                parts = line.strip().split("\t")
-                if len(parts) == 7:
-                    cookies_to_set.append(
-                        {
-                            "name": parts[5],
-                            "value": parts[6],
-                            "domain": parts[0],
-                            "path": parts[2],
-                            "expires": int(parts[4]),
-                            "secure": parts[3] == "TRUE",
-                        }
-                    )
+                for line in fp:
+                    if not line.startswith(".facebook.com"):
+                        continue
+                    parts = line.strip().split("\t")
+                    if len(parts) == 7:
+                        cookies_to_set.append(
+                            {
+                                "name": parts[5],
+                                "value": parts[6],
+                                "domain": parts[0],
+                                "path": parts[2],
+                                "expires": int(parts[4]),
+                                "secure": parts[3] == "TRUE",
+                            }
+                        )
 
         await self.page.setCookie(*cookies_to_set)
         log.info("Đã nạp %d cookie", len(cookies_to_set))
