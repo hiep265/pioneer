@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from typing import List, Dict, Optional
 
-from ..services.news_service import NewsService
+from ..logic.news_service import NewsService
 
 # Khởi tạo APIRouter cho các endpoint liên quan đến tin tức.
 # Router này sẽ được gắn vào ứng dụng FastAPI chính.

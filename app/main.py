@@ -1,13 +1,13 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .controllers import news_controller
+from .controllers import news_controller, expert_controller
 
 # Khởi tạo ứng dụng FastAPI
 # Đây là điểm khởi đầu của ứng dụng NewsEngine API.
 app = FastAPI(
-    title="NewsEngine API",
-    description="Một API có cấu trúc để tìm nạp, chấm điểm và xếp hạng các bài báo tin tức.",
+    title="Pioneer API",
+    description="Một API tổng hợp để tìm nạp, chấm điểm và xếp hạng các bài báo tin tức và thu thập bài đăng của chuyên gia.",
     version="0.2.0"
 )
 
@@ -25,6 +25,7 @@ app.add_middleware(
 # Bao gồm các router từ các controller
 # Điều này giúp tổ chức các endpoint API theo từng module (ví dụ: /news cho các endpoint liên quan đến tin tức).
 app.include_router(news_controller.router, prefix="/news", tags=["News"])
+app.include_router(expert_controller.router, prefix="/expert", tags=["Expert Crawler"])
 
 @app.get("/health", summary="Kiểm tra trạng thái API", tags=["Giám sát"])
 def health_check():
@@ -35,5 +36,4 @@ def health_check():
     return {"status": "ok"}
 
 # Để chạy ứng dụng này cục bộ, sử dụng lệnh sau trong terminal (sau khi kích hoạt môi trường ảo):
-# uvicorn services.news_engine.main:app --reload --port 8001
-# uvicorn services.news_engine.main:app --reload --port 8001
+# uvicorn app.main:app --reload --port 8001

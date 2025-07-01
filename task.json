@@ -2,7 +2,7 @@
   {
     "id": 0,
     "title": "Setup Development Environment",
-    "status": "completed",
+    "status": "pending",
     "description": "Khởi tạo mono-repo với virtual environment và cấu hình cơ bản.",
     "details": "1. **Git repository**: Tạo `.gitignore`, `LICENSE`, commit đầu tiên.\n2. **Python virtual env**: `python -m venv venv`, activate, `pip install -r requirements.txt`.\n3. **Requirements.txt**: `fastapi`, `uvicorn`, `python-telegram-bot`, `feedparser`, `openai`, `facebook-business-sdk`, `fuzzywuzzy`, `pillow`, `gspread`, `pandas`, `pytest`, `python-dotenv`.\n4. **Environment config**: Tạo `.env.example` với TELEGRAM_BOT_TOKEN, OPENAI_API_KEY, FB_PAGE_ACCESS_TOKEN, GOOGLE_SERVICE_JSON.\n5. **Basic README**: Hướng dẫn setup environment, install dependencies.",
     "priority": "high",
@@ -28,20 +28,14 @@
   {
     "id": 1,
     "title": "NewsEngine MVP",
-    "status": "completed", 
+    "status": "pending", 
     "description": "Core API `/news/top3` lấy RSS + GPT ranking, chạy standalone.",
     "details": "1. **RSS Fetcher**: `services/news_engine/rss_fetcher.py` - lấy 15 bài/source từ Guardian, Reuters.\n2. **Simple Deduplication**: So sánh title similarity > 80% thì loại bỏ.\n3. **GPT Scorer**: OpenAI API prompt ngắn gọn, trả về relevance score 0-1.\n4. **FastAPI app**: `services/news_engine/main.py` với endpoint `/news/top3`, CORS enabled.\n5. **Local run**: `uvicorn main:app --reload --port 8001`",
     "priority": "high",
     "testStrategy": "GET localhost:8001/news/top3 trả về 3 articles có title, summary, score.",
     "dependencies": [0],
     "timeline": "Day 1 Afternoon (4-5 hours)",
-    "affected_files": [
-      "services/news_engine/main.py",
-      "services/news_engine/controllers/news_controller.py",
-      "services/news_engine/services/news_service.py",
-      "services/news_engine/repositories/news_repository.py",
-      "services/news_engine/repositories/scoring_repository.py"
-    ],
+    "affected_files": ["services/news_engine/main.py", "services/news_engine/rss_fetcher.py", "services/news_engine/gpt_scorer.py"],
     "subtasks": [
       {
         "id": "1.1",
@@ -72,8 +66,8 @@
     "priority": "high", 
     "testStrategy": "Telegram /start → 3 articles với buttons → chọn article 2 → nhận confirmation.",
     "dependencies": [1],
-    "timeline": "Day 2 Morning (4 hours)",
-    "affected_files": [],
+    "timeline": "Day 1 Evening (3 hours)",
+    "affected_files": ["n8n/workflows/news_selection.json", "services/telegram_bot/bot.py"],
     "subtasks": [
       {
         "id": "2.1",
@@ -91,70 +85,125 @@
         "id": "2.3",
         "title": "News selection workflow",
         "description": "n8n workflow: trigger → API call → format → send",
-        "timeline": "90 mins"
+        "timeline": "30 mins"
       }
     ]
   },
   {
     "id": 3,
-    "title": "CaptionAI Service",
+    "title": "Expert Facebook Crawler",
     "status": "pending",
-    "description": "Standalone FastAPI service sinh caption tiếng Việt từ article data.",
-    "details": "1. **Prompt Engineering**: Template prompt với article title, summary, focus topics.\n2. **OpenAI Integration**: GPT-4o với system prompt định hình tone 'expert, critical, engaging'.\n3. **Post-processing**: Validate length 250-400 words, tiếng Việt có dấu.\n4. **FastAPI endpoint**: POST `/caption` nhận {article, optional_context} → {caption, word_count}.\n5. **Local run**: Port 8002, CORS enabled.",
     "priority": "high",
-    "testStrategy": "POST mock article → caption 250-400 từ tiếng Việt, tone phù hợp.",
-    "dependencies": [0],
-    "timeline": "Day 2 Afternoon (3-4 hours)", 
-    "affected_files": [],
+    "timeline": "Day 2 Morning (≈ 3 h)",
+    "description": "Thu thập bài + bình luận Facebook của chuyên gia Ho Quoc Tuan (tuangho) trong 10 ngày gần nhất, đối chiếu với topic từ API.",
+    "details": [
+      "1. **Primary – facebook-scraper**: dùng cookie đăng nhập (file .env) → lấy post + full comments.",
+      "2. **Fallback – Graph API**: nếu bị chặn / cần dữ liệu cấu trúc: `/v18.0/{page-id}/posts?fields=message,created_time,comments.summary(true)`.",
+      "3. **Content extraction**: post_id, text, timestamp, reactions, images, top-level & nested comments.",
+      "4. **Semantic keyword match**: dùng embedding (all-mpnet-base-v2) so cosine ≥ 0.5 với keywords do API gửi.",
+      "5. **FastAPI endpoint**: `GET /expert-posts?keywords=Trump,US&days=10` → trả JSON {post_id, time, text, score, reason}.",
+      "6. **Reason field**: giải thích ngắn vì sao post khớp (từ khóa, cosine)."
+    ],
+    "testStrategy": "Query `keywords=Trump` → trả bài chứa/có liên quan tới Trump trong 10 ngày, kèm score & reason.",
+    "affected_files": [
+      "services/expert_crawler/main.py",
+      "services/expert_crawler/fb_scraper.py",
+      "services/expert_crawler/keyword_matcher.py"
+    ],
     "subtasks": [
       {
         "id": "3.1",
-        "title": "Prompt templates",
-        "description": "Vietnamese caption prompts, tone guidelines",
-        "timeline": "90 mins"
+        "title": "facebook-scraper client + cookie",
+        "description": "Load cookie from .env, fetch last N posts & comments",
+        "timeline": "60 min"
       },
       {
         "id": "3.2",
-        "title": "OpenAI client wrapper", 
-        "description": "API calls + error handling + retry logic",
-        "timeline": "90 mins"
+        "title": "Graph API fallback wrapper",
+        "description": "Page token + /posts endpoint, unify to same schema",
+        "timeline": "45 min"
       },
       {
         "id": "3.3",
-        "title": "FastAPI service",
-        "description": "/caption endpoint + validation",
-        "timeline": "60 mins"
+        "title": "Keyword matcher (embedding)",
+        "description": "all-mpnet-base-v2 cosine filter, return score & reason",
+        "timeline": "45 min"
+      },
+      {
+        "id": "3.4",
+        "title": "FastAPI endpoint",
+        "description": "Wire everything, query params: keywords, days, limit",
+        "timeline": "30 min"
       }
-    ]
+    ],
+    "dependencies": [0]
   },
   {
     "id": 4,
-    "title": "Caption Approval Workflow",
+    "title": "CaptionAI Service with Expert Context",
     "status": "pending",
-    "description": "n8n workflow: selected article → generate caption → approval loop với edit option.",
-    "details": "1. **Extend n8n workflow**: Sau khi chọn article → HTTP call CaptionAI.\n2. **Draft presentation**: Format caption trong Telegram message với Approve/Edit buttons.\n3. **Edit loop**: Nếu Edit → capture user feedback → regenerate với feedback.\n4. **Max 2 retries**: Sau 2 lần edit → force approve hoặc cancel.\n5. **Data flow**: Pass approved caption to next step.",
+    "description": "Service sinh caption tiếng Việt từ article + expert posts context.",
+    "details": "1. **Enhanced Prompt**: Template với article data + expert posts làm reference context.\n2. **Context Integration**: Nếu có expert posts → thêm vào prompt như 'expert perspective', nếu không có → basic prompt.\n3. **Tone Matching**: Phân tích tone của expert posts, apply similar style.\n4. **OpenAI Integration**: GPT-4o với system prompt 'expert, critical, engaging' + context.\n5. **FastAPI endpoint**: POST `/caption` nhận {article, expert_posts?} → {caption, word_count, has_expert_context}.",
     "priority": "high",
-    "testStrategy": "Edit 1 lần → new caption; Approve → next workflow step.",
-    "dependencies": [2, 3],
-    "timeline": "Day 2 Evening (2-3 hours)",
-    "affected_files": [],
+    "testStrategy": "POST article + expert posts → caption reference expert viewpoint; POST article only → basic caption.",
+    "dependencies": [0, 3],
+    "timeline": "Day 2 Afternoon (3 hours)",
+    "affected_files": ["services/caption_ai/main.py", "services/caption_ai/prompts.py", "services/caption_ai/context_builder.py"],
     "subtasks": [
       {
         "id": "4.1",
-        "title": "Caption generation node",
-        "description": "HTTP request to CaptionAI service",
-        "timeline": "45 mins"
+        "title": "Context-aware prompts",
+        "description": "Templates với và không có expert context",
+        "timeline": "90 mins"
       },
       {
         "id": "4.2",
-        "title": "Approval interface",
-        "description": "Telegram buttons + callback handling",
-        "timeline": "90 mins"
+        "title": "Expert tone analysis",
+        "description": "Basic sentiment/tone extraction từ expert posts",
+        "timeline": "60 mins"
+      },
+      {
+        "id": "4.3",
+        "title": "Enhanced FastAPI service",
+        "description": "/caption endpoint với optional expert_posts",
+        "timeline": "30 mins"
       }
     ]
   },
   {
     "id": 5,
+    "title": "Enhanced Caption Workflow with Expert Context",
+    "status": "pending",
+    "description": "n8n workflow: selected article → crawl expert posts → generate context-aware caption → approval loop.",
+    "details": "1. **Article Keywords Extraction**: Từ selected article, extract keywords chính.\n2. **Expert Posts Lookup**: HTTP call Expert Crawler với keywords.\n3. **Context-aware Caption**: HTTP call CaptionAI với article + expert_posts context.\n4. **Enhanced Draft**: Format caption + show expert context used (nếu có).\n5. **Approval Loop**: Approve/Edit với feedback, max 2 retries.",
+    "priority": "high",
+    "testStrategy": "Article về Trump → tìm thấy expert posts → caption reference expert view; Article obscure → no expert context → basic caption.",
+    "dependencies": [2, 3, 4],
+    "timeline": "Day 2 Evening (3 hours)",
+    "affected_files": ["n8n/workflows/news_selection.json"],
+    "subtasks": [
+      {
+        "id": "5.1",
+        "title": "Keywords extraction node",
+        "description": "Extract main topics từ selected article",
+        "timeline": "45 mins"
+      },
+      {
+        "id": "5.2",
+        "title": "Expert lookup integration",
+        "description": "HTTP call to Expert Crawler service",
+        "timeline": "60 mins"
+      },
+      {
+        "id": "5.3",
+        "title": "Context-aware caption flow",
+        "description": "Call CaptionAI với enhanced context",
+        "timeline": "75 mins"
+      }
+    ]
+  },
+  {
+    "id": 6,
     "title": "Facebook Publisher Service",  
     "status": "pending",
     "description": "FastAPI service đăng text post lên Facebook Page (tạm bỏ image).",
@@ -163,16 +212,16 @@
     "testStrategy": "POST với test message → Facebook page có post mới, trả về post_id.",
     "dependencies": [0],
     "timeline": "Day 3 Morning (3 hours)",
-    "affected_files": [],
+    "affected_files": ["services/fb_publisher/main.py", "services/fb_publisher/fb_client.py"],
     "subtasks": [
       {
-        "id": "5.1", 
+        "id": "6.1", 
         "title": "Facebook SDK setup",
         "description": "API client + authentication",
         "timeline": "90 mins"
       },
       {
-        "id": "5.2",
+        "id": "6.2",
         "title": "Publishing logic",
         "description": "Text post + error handling",
         "timeline": "90 mins"
@@ -180,86 +229,86 @@
     ]
   },
   {
-    "id": 6,
-    "title": "End-to-End Publishing Workflow",
-    "status": "pending", 
-    "description": "Complete n8n workflow: news selection → caption → publish to Facebook → log results.",
-    "details": "1. **Extend workflow**: Thêm HTTP node gọi Facebook Publisher.\n2. **Final confirmation**: Show preview trước khi publish.\n3. **Publish step**: POST to FbPublisher với approved caption.\n4. **Simple logging**: Log kết quả vào local file hoặc console.\n5. **Success message**: Gửi Telegram confirmation với FB post link.",
-    "priority": "high",
-    "testStrategy": "Complete flow /start → chọn bài → approve caption → publish thành công → nhận link FB.",
-    "dependencies": [4, 5],
-    "timeline": "Day 3 Afternoon (4 hours)",
-    "affected_files": [],
-    "subtasks": [
-      {
-        "id": "6.1",
-        "title": "Publishing integration",
-        "description": "Connect approval flow to FB publisher",
-        "timeline": "90 mins"
-      },
-      {
-        "id": "6.2",
-        "title": "Logging system", 
-        "description": "Simple file-based logging",
-        "timeline": "60 mins"
-      },
-      {
-        "id": "6.3",
-        "title": "End-to-end testing",
-        "description": "Full workflow validation",
-        "timeline": "90 mins"
-      }
-    ]
-  },
-  {
     "id": 7,
-    "title": "Basic Testing & Documentation",
-    "status": "pending",
-    "description": "Unit tests cho core functions, integration test cho full workflow, update README.",
-    "details": "1. **Unit tests**: Test RSS fetcher, GPT scorer, caption generator (với mock).\n2. **Integration test**: Full workflow test với mock Facebook API.\n3. **Documentation**: Update README với setup instructions, API endpoints.\n4. **Environment setup guide**: Detailed .env configuration.\n5. **Demo preparation**: Sample run với screenshots.",
-    "priority": "medium",
-    "testStrategy": "pytest pass toàn bộ, README guide cho phép setup từ đầu trong 15 phút.",
-    "dependencies": [6],
-    "timeline": "Day 4 Morning (3 hours)",
-    "affected_files": ["tests/", "README.md", "docs/SETUP.md"],
+    "title": "End-to-End Publishing Workflow with Logging",
+    "status": "pending", 
+    "description": "Complete n8n workflow: news → expert lookup → caption → publish → comprehensive logging.",
+    "details": "1. **Publishing Integration**: Thêm HTTP node gọi Facebook Publisher.\n2. **Final confirmation**: Show preview caption + expert context used.\n3. **Publish step**: POST to FbPublisher với approved caption.\n4. **Comprehensive logging**: Log từng step: news fetch, expert posts found, caption versions, publish result.\n5. **CSV logging**: Ghi vào file CSV với columns: timestamp, article_title, expert_posts_count, caption_final, fb_post_id, status.",
+    "priority": "high",
+    "testStrategy": "Complete flow → CSV có record đầy đủ: article info, expert context, final caption, FB post link.",
+    "dependencies": [5, 6],
+    "timeline": "Day 3 Afternoon (4 hours)",
+    "affected_files": ["n8n/workflows/news_selection.json", "logs/workflow_activity.csv"],
     "subtasks": [
       {
         "id": "7.1",
-        "title": "Core unit tests",
-        "description": "Test individual service functions",
+        "title": "Publishing integration",
+        "description": "Connect caption approval to FB publisher",
         "timeline": "90 mins"
       },
       {
         "id": "7.2",
-        "title": "Documentation update",
-        "description": "README + setup guide",
+        "title": "Comprehensive logging system", 
+        "description": "CSV logging với all workflow steps",
         "timeline": "90 mins"
+      },
+      {
+        "id": "7.3",
+        "title": "End-to-end testing",
+        "description": "Full workflow với expert context validation",
+        "timeline": "120 mins"
       }
     ]
   },
   {
     "id": 8,
-    "title": "Demo Preparation & Deliverables",
+    "title": "Basic Testing & Documentation",
     "status": "pending",
-    "description": "Chuẩn bị demo, export n8n workflow, tạo sample data, video demo.",
-    "details": "1. **n8n workflow export**: JSON file có thể import.\n2. **Sample run log**: CSV/JSON với các bước đã thực hiện.\n3. **Demo script**: Step-by-step demo flow.\n4. **Video recording**: Screen recording full workflow 3-5 phút.\n5. **Final README**: Complete setup + run instructions.",
-    "priority": "medium", 
-    "testStrategy": "Người khác có thể follow README để setup và chạy demo thành công.",
+    "description": "Unit tests cho core functions bao gồm expert crawler, integration test, update README.",
+    "details": "1. **Unit tests**: Test RSS fetcher, GPT scorer, expert crawler (với mock FB), caption generator.\n2. **Integration test**: Full workflow test với mock Facebook API và mock expert posts.\n3. **Expert crawler test**: Test với và không có expert posts, verify keyword matching.\n4. **Documentation**: Update README với setup instructions, API endpoints, expert FB config.\n5. **Environment setup guide**: Detailed .env với FB tokens, expert profile config.",
+    "priority": "medium",
+    "testStrategy": "pytest pass toàn bộ, README cho phép setup expert FB crawling, test workflow với/không expert context.",
     "dependencies": [7],
-    "timeline": "Day 4 Afternoon (2-3 hours)",
-    "affected_files": ["n8n/workflows/", "demo/", "README.md"],
+    "timeline": "Day 4 Morning (3 hours)",
+    "affected_files": ["tests/", "README.md", "docs/SETUP.md"],
     "subtasks": [
       {
         "id": "8.1",
-        "title": "Export & package",
-        "description": "n8n workflow export + sample data",
-        "timeline": "60 mins"
+        "title": "Core unit tests + expert crawler",
+        "description": "Test individual services including FB crawler",
+        "timeline": "120 mins"
       },
       {
         "id": "8.2",
-        "title": "Demo recording",
-        "description": "Screen recording + demo script",
+        "title": "Documentation với expert setup",
+        "description": "README + FB expert profile configuration guide",
+        "timeline": "60 mins"
+      }
+    ]
+  },
+  {
+    "id": 9,
+    "title": "Demo Preparation & Deliverables",
+    "status": "pending",
+    "description": "Demo với expert context, export workflow, sample data với expert posts, video demo.",
+    "details": "1. **n8n workflow export**: JSON file complete workflow có expert lookup.\n2. **Sample run log**: CSV với expert posts context examples.\n3. **Expert demo scenarios**: Article có expert posts vs không có expert posts.\n4. **Video recording**: Screen recording full workflow với expert context demo.\n5. **Final README**: Complete setup including expert FB profile configuration.",
+    "priority": "medium", 
+    "testStrategy": "Demo 2 scenarios: có expert context vs không có → thấy difference rõ ràng trong caption quality.",
+    "dependencies": [8],
+    "timeline": "Day 4 Afternoon (2-3 hours)",
+    "affected_files": ["n8n/workflows/", "demo/", "README.md", "demo/sample_expert_posts.json"],
+    "subtasks": [
+      {
+        "id": "9.1",
+        "title": "Expert context demo setup",
+        "description": "Prepare 2 demo scenarios với/không expert posts",
         "timeline": "90 mins"
+      },
+      {
+        "id": "9.2",
+        "title": "Demo recording với expert flow",
+        "description": "Screen recording highlight expert context usage",
+        "timeline": "60 mins"
       }
     ]
   }

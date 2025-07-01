@@ -10,5 +10,9 @@ gspread
 pandas
 pytest
 python-dotenv
-beautifulsoup4 
-sentence-transformers scikit-learn
+beautifulsoup4
+sentence-transformers
+scikit-learn
+facebook-scraper
+selenium==4.21.0
+puppeteer
